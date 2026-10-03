@@ -80,6 +80,17 @@ pub extern "C" fn user_main(argc: isize, argv: *const *const u8) -> i32 {
         puts(b"\n");
     }
 
+    // 3P4-2 验收：程序名经 auxv 型 AT_EXECFN 槽交付——**不是** argv[0]（后者是整条
+    // 命令行，语义已发布不得改变）。这一行同时验证 auxv 定位与程序名内容。
+    match unsafe { libsys::execfn(argc, argv) } {
+        Some(p) => {
+            puts(b"execfn=");
+            let _ = write(STDOUT, p);
+            puts(b"\n");
+        }
+        None => puts(b"execfn=<none>\n"),
+    }
+
     // 主线程：在自己的块上写 0x11111111。
     unsafe { SLOT = 0x1111_1111 };
     let main_before = unsafe { SLOT };
