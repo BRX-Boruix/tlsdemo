@@ -65,6 +65,21 @@ pub extern "C" fn user_main(argc: isize, argv: *const *const u8) -> i32 {
         None => puts(b"cmd_len=none\n"),
     }
 
+    // 3P4-2 验收：报出内核交付的环境（envp）中的 PATH / PWD——envp 定位由 libsys
+    // 按 ABI §4 规则（argv + (argc + 1) * 8）完成，故这一行同时验证了布局与内容。
+    for key in [&b"PATH"[..], &b"PWD"[..]] {
+        puts(b"env ");
+        let _ = write(STDOUT, key);
+        puts(b"=");
+        match unsafe { libsys::var(argc, argv, key) } {
+            Some(v) => {
+                let _ = write(STDOUT, v);
+            }
+            None => puts(b"<none>"),
+        }
+        puts(b"\n");
+    }
+
     // 主线程：在自己的块上写 0x11111111。
     unsafe { SLOT = 0x1111_1111 };
     let main_before = unsafe { SLOT };
