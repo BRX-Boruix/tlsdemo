@@ -2,7 +2,7 @@
 #![no_main]
 #![feature(thread_local)]
 
-use libsys::{mmap, thread_exit, thread_join, thread_spawn, write, STDOUT};
+use libsys::{cmdline, mmap, thread_exit, thread_join, thread_spawn, write, STDOUT};
 
 /// 必须**外部可见**且**先写后读**，否则 LLVM 会消除/常量折叠它——产物既无 PT_TLS
 /// 也无 fs: 访问，"TLS 测试"退化成打印常量（本项目连续踩中两次）。
@@ -49,7 +49,22 @@ extern "C" fn thread_body() {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn user_main(_argc: isize, _argv: *const *const u8) -> i32 {
+pub extern "C" fn user_main(argc: isize, argv: *const *const u8) -> i32 {
+    // 3P4-2 验收：报出**内核/loader 实际交付**的命令行（长度 + 尾部 16 字节）。
+    // 旧上限 511 字节一旦回归，长命令行会被 E2BIG 拒绝（程序根本不会跑到这里）；
+    // 若被静默截断，尾部字节就对不上——故尾部是"完整送达"的行为锚点。
+    match unsafe { cmdline(argc, argv) } {
+        Some(c) => {
+            puts(b"cmd_len=");
+            put_hex(c.len() as u64);
+            puts(b"\ncmd_tail=");
+            let n = c.len().min(16);
+            let _ = write(STDOUT, &c[c.len() - n..]);
+            puts(b"\n");
+        }
+        None => puts(b"cmd_len=none\n"),
+    }
+
     // 主线程：在自己的块上写 0x11111111。
     unsafe { SLOT = 0x1111_1111 };
     let main_before = unsafe { SLOT };
